@@ -371,7 +371,7 @@ export function findLastIndex<T>(arr: T[], cb: (val: T) => boolean) {
 }
 
 export function getWindowSize(): { width: number; height: number } {
-  // Aparently this is crazy across browsers.
+  // Apparently this is crazy across browsers.
   return {
     width: Math.max(
       document.body.scrollWidth,
@@ -421,6 +421,8 @@ function getPos(e: PosEvent): { clientX: number; clientY: number } {
     case "mousemove": {
       return e as MouseEvent;
     }
+    case "pointerdown":
+      return e as React.PointerEvent<HTMLElement>;
     default:
       throw new Error(`Unexpected event type: ${e.type}`);
   }

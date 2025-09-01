@@ -1,23 +1,31 @@
 # Winamp Equalizer Preset Parser
 
-Winamp allows you to save your equalizser settings to `.eqf` file. This package allows you to parse these files.
+Winamp allows you to save your equalizer settings to `.eqf` file. This package allows you to parse these files.
 
 ## Installation
 
-    npm install --save winamp-eqf
+```bash
+npm install --save winamp-eqf
+```
 
-## Ussage
+## Usage
 
-    import {parser, creator} from 'winamp-eqf';
+```typescript
+import { parser, creator, EqfData, CreateEqfData } from "winamp-eqf";
 
-    // ... Get your .eqf or .q1 file as an ArrayBuffer
-    const eqf = parser(eqfArrayBuffer);
+// ... Get your .eqf or .q1 file as an ArrayBuffer
+const eqf: EqfData = parser(eqfArrayBuffer);
 
-    const eqfArrayBuffer = creator(eqf);
+const eqfArrayBuffer: ArrayBuffer = creator(eqf);
+```
+
+This package is an ES module and requires Node.js 14+ or a modern bundler that supports ES modules.
 
 ## API
 
-### `parser(ArrayBuffer)`
+This package is written in TypeScript and provides full type definitions.
+
+### `parser(ArrayBuffer): EqfData`
 
 #### Return value
 
@@ -44,13 +52,11 @@ Winamp allows you to save your equalizser settings to `.eqf` file. This package 
 }
 ```
 
-### `creator(eqfObject)`
+### `creator(eqfObject: CreateEqfData): ArrayBuffer`
 
 #### Return Value: `ArrayBuffer`
 
 `eqfObject` is an object with the same shape as that returned by `parser()`.
-
-
 
 ## Source Material
 
@@ -79,4 +85,4 @@ And then via direct message:
 
 > Will do it here as I can type a bit more, but the only obvious thing wrong with the link is the signature assumption as it's not guaranteed to be 'entry1' As you can have multiple eq blocks in a file.
 
-> If you've looked at winamp.q1 you should see multiple presets in that file which follow one after each other so the file signature (winamp.q1 or a specific *.eqf file) is "Winamp EQ library file v1.1\x1A!--" (pulled that out from the disassembler) it's then a 257 byte buffer (256 + null character to terminate correctly) then the 10 byte block relating to the eq sliders (need to double-check the range base) followed by the 1 byte for the preamp slider then if there's more presets in the file, they follow on immediately after with the name block looking at the preamp slider, -12dB = 0x3F, 0dB = 0x1F, 12dB = 0 (so a 0-63 range) that seems to be the same for the other sliders (and matches 1:1 with the sdk details) and I think that's it :) in the winamp.q1 file, the 'default' entry is either a flat preset or what's been saved after customisation (in-case you're wanting to mirror the native behaviour via the preset -> save -> default action)
+> If you've looked at winamp.q1 you should see multiple presets in that file which follow one after each other so the file signature (winamp.q1 or a specific \*.eqf file) is "Winamp EQ library file v1.1\x1A!--" (pulled that out from the disassembler) it's then a 257 byte buffer (256 + null character to terminate correctly) then the 10 byte block relating to the eq sliders (need to double-check the range base) followed by the 1 byte for the preamp slider then if there's more presets in the file, they follow on immediately after with the name block looking at the preamp slider, -12dB = 0x3F, 0dB = 0x1F, 12dB = 0 (so a 0-63 range) that seems to be the same for the other sliders (and matches 1:1 with the sdk details) and I think that's it :) in the winamp.q1 file, the 'default' entry is either a flat preset or what's been saved after customisation (in-case you're wanting to mirror the native behaviour via the preset -> save -> default action)

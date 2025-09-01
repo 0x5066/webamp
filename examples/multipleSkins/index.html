@@ -2,22 +2,27 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
 
   <body>
     <div id="app" style="height: 100vh">
       <!-- Webamp will attempt to center itself within this div -->
     </div>
-    <script src="https://unpkg.com/webamp@1.4.2/built/webamp.bundle.min.js"></script>
-    <script>
-      const Webamp = window.Webamp;
+    <script type="module">
+      import Webamp from "https://unpkg.com/webamp@^2";
       const webamp = new Webamp({
         // Optional. An array of objects representing skins.
         // These will appear in the "Options" menu under "Skins".
-        // Note: These URLs must be served with the correct CORs headers.
+        // NOTE: These URLs must be served with the correct CORs headers.
+        // https://docs.webamp.org/docs/guides/cors
         //
         // These will appear in the dropdown menu under "Skins".
         availableSkins: [
+          {
+            url: "https://archive.org/cors/winampskin_Zelda_Amp/Zelda-Amp.wsz",
+            name: "Zelda Amp",
+          },
           {
             url: "https://archive.org/cors/winampskin_Green-Dimension-V2/Green-Dimension-V2.wsz",
             name: "Green Dimension V2",
@@ -27,6 +32,9 @@
             name: "Mac OSX v1.5 (Aqua)",
           },
         ],
+        initialSkin: {
+          url: "https://archive.org/cors/winampskin_Zelda_Amp/Zelda-Amp.wsz",
+        },
         initialTracks: [
           {
             metaData: {

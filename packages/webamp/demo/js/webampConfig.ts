@@ -6,20 +6,7 @@ import isButterchurnSupported from "butterchurn/dist/isSupported.min";
 import { loggerMiddleware } from "./eventLogger";
 import * as SoundCloud from "./SoundCloud";
 
-import {
-  Action,
-  Options,
-  PrivateOptions,
-  WINDOWS,
-  STEP_MARQUEE,
-  UPDATE_TIME_ELAPSED,
-  UPDATE_WINDOW_POSITIONS,
-  SET_VOLUME,
-  SET_BALANCE,
-  SET_BAND_VALUE,
-  AppState,
-  WindowLayout,
-} from "./Webamp";
+import { Action, Options, AppState, WindowLayout } from "../../js/types";
 
 import { getButterchurnOptions } from "./butterchurnOptions";
 import dropboxFilePicker from "./dropboxFilePicker";
@@ -27,15 +14,15 @@ import availableSkins from "./availableSkins";
 
 import { initialTracks, initialState } from "./config";
 import screenshotInitialState from "./screenshotInitialState";
-import { InjectableDependencies } from "../../js/webampLazy.jsx";
+import { InjectableDependencies, PrivateOptions } from "../../js/webampLazy";
 
 const NOISY_ACTION_TYPES = new Set([
-  STEP_MARQUEE,
-  UPDATE_TIME_ELAPSED,
-  UPDATE_WINDOW_POSITIONS,
-  SET_VOLUME,
-  SET_BALANCE,
-  SET_BAND_VALUE,
+  "STEP_MARQUEE",
+  "UPDATE_TIME_ELAPSED",
+  "UPDATE_WINDOW_POSITIONS",
+  "SET_VOLUME",
+  "SET_BALANCE",
+  "SET_BAND_VALUE",
 ]);
 
 const MIN_MILKDROP_WIDTH = 725;
@@ -115,6 +102,7 @@ export async function getWebampConfig(
     windowLayout,
     filePickers: [dropboxFilePicker],
     enableHotkeys: true,
+    enableMediaSession: true,
     handleTrackDropEvent: (e) => {
       const trackJson = e.dataTransfer.getData("text/json");
       if (trackJson == null) {
@@ -131,9 +119,8 @@ export async function getWebampConfig(
       // @ts-ignore
       import(/* webpackChunkName: "jszip" */ "jszip/dist/jszip"),
     requireMusicMetadata: () =>
-      import(
-        /* webpackChunkName: "music-metadata-browser" */ "music-metadata-browser/dist/index"
-      ),
+      // @ts-ignore
+      import(/* webpackChunkName: "music-metadata" */ "music-metadata"),
     __initialState: screenshot ? screenshotInitialState : initialState,
     __butterchurnOptions,
     __customMiddlewares: [sentryMiddleware, loggerMiddleware],

@@ -1,54 +1,111 @@
 name: CI
 
-on: [push]
+on:
+  push:
+  pull_request:
 
 jobs:
-  build-and-test:
+  # Main CI job - using Turborepo for dependency management
+  ci:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [20.x]
-
     steps:
-      - uses: actions/checkout@v1
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
         with:
-          node-version: ${{ matrix.node-version }}
+          version: 9.12.0
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "pnpm"
       - name: Install Dependencies
-        run: yarn
-      - name: Build
+        run: pnpm install --frozen-lockfile
+      - name: Build all packages
         run: |
-          yarn workspace ani-cursor build
-          yarn workspace webamp build
-          yarn workspace webamp build-library
-      - name: Lint
-        run: |
-          yarn lint
-          yarn workspace webamp type-check
-      - name: Run Unit Tests
-        run: |
-          touch packages/skin-database/config.js
-          yarn test
-          yarn workspace webamp test
-      - name: Run Integration Tests
-        run: yarn workspace webamp integration-tests
+          npx turbo build build-library
         env:
-          CI: true
-      - name: Upload Screenshot Diffs
-        if: failure()
-        uses: actions/upload-artifact@v2
-        with:
-          name: image_diffs
-          path: packages/webamp/js/__tests__/__image_snapshots__/__diff_output__/
-      - name: Generate New Screenshots
-        if: failure()
+          NODE_ENV: production
+      - name: Lint and type-check
         run: |
-          yarn workspace webamp integration-tests -u
-      - name: Upload New Screenshots
-        if: failure()
-        uses: actions/upload-artifact@v1
+          npx turbo lint type-check
+      - name: Validate Grats generated files are up-to-date
+        run: ./scripts/validate-grats.sh
+      - name: Run tests
+        run: |
+          npx turbo test -- --maxWorkers=2
+        env:
+          NODE_ENV: test
+      - name: Cache build artifacts for release
+        uses: actions/cache@v4
         with:
-          name: new_images
-          path: packages/webamp/js/__tests__/__image_snapshots__/
+          path: |
+            packages/ani-cursor/dist
+            packages/winamp-eqf/built
+            packages/webamp/built
+          key: release-artifacts-${{ github.sha }}
+  # Release job - publish packages to NPM
+  release:
+    name: Publish packages to NPM
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.repository == 'captbaritone/webamp'
+    needs: [ci]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          registry-url: https://registry.npmjs.org/
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Restore build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/ani-cursor/dist
+            packages/winamp-eqf/built
+            packages/webamp/built
+          key: release-artifacts-${{ github.sha }}
+          fail-on-cache-miss: true
+      - name: Set version for all packages
+        if: github.ref == 'refs/heads/master'
+        run: |
+          echo "Setting version to 0.0.0-next-${RELEASE_COMMIT_SHA::7}"
+          cd packages/webamp && npm version 0.0.0-next-${RELEASE_COMMIT_SHA::7} --no-git-tag-version
+          cd ../ani-cursor && npm version 0.0.0-next-${RELEASE_COMMIT_SHA::7} --no-git-tag-version
+          cd ../winamp-eqf && npm version 0.0.0-next-${RELEASE_COMMIT_SHA::7} --no-git-tag-version
+        env:
+          RELEASE_COMMIT_SHA: ${{ github.sha }}
+      - name: Build release version
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        run: exit 1 # TODO: Script to update version number in webampLazy.tsx
+      - name: Publish ani-cursor to npm
+        working-directory: ./packages/ani-cursor
+        if: github.ref == 'refs/heads/master' || github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        run: |
+          npm publish ${TAG} --ignore-scripts
+        env:
+          TAG: ${{ github.ref == 'refs/heads/master' && '--tag=next' || ''}}
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+      - name: Publish winamp-eqf to npm
+        working-directory: ./packages/winamp-eqf
+        if: github.ref == 'refs/heads/master' || github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        run: |
+          npm publish ${TAG} --ignore-scripts
+        env:
+          TAG: ${{ github.ref == 'refs/heads/master' && '--tag=next' || ''}}
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+      - name: Publish webamp to npm
+        working-directory: ./packages/webamp
+        if: github.ref == 'refs/heads/master' || github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        # Use pre-built artifacts instead of rebuilding
+        run: |
+          npm publish ${TAG} --ignore-scripts
+        env:
+          TAG: ${{ github.ref == 'refs/heads/master' && '--tag=next' || ''}}
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}

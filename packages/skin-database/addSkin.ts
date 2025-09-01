@@ -59,7 +59,7 @@ async function addModernSkinFromBuffer(
 ): Promise<Result> {
   console.log("Write temporarty file.");
   const tempFile = temp.path({ suffix: ".wal" });
-  fs.writeFileSync(tempFile, buffer);
+  fs.writeFileSync(tempFile, new Uint8Array(buffer));
   console.log("Put skin to S3.");
   await S3.putSkin(md5, buffer, "wal");
 
@@ -83,7 +83,7 @@ async function addClassicSkinFromBuffer(
   uploader: string
 ): Promise<Result> {
   const tempFile = temp.path({ suffix: ".wsz" });
-  fs.writeFileSync(tempFile, buffer);
+  fs.writeFileSync(tempFile, new Uint8Array(buffer));
   const tempScreenshotPath = temp.path({ suffix: ".png" });
 
   const logLines: string[] = [];
@@ -117,7 +117,8 @@ async function addClassicSkinFromBuffer(
 
   await setHashesForSkin(skin);
 
-  await Skins.updateSearchIndex(ctx, md5);
+  // Disable while we figure out our quota
+  // await Skins.updateSearchIndex(ctx, md5);
 
   return { md5, status: "ADDED", skinType: "CLASSIC" };
 }

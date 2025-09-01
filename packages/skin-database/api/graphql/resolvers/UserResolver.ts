@@ -1,18 +1,17 @@
-import { Ctx } from "..";
-import { Query } from "./QueryResolver";
+import UserContext from "../../../data/UserContext.js";
 
 /** @gqlType User */
 export default class UserResolver {
   /** @gqlField */
-  username(_args: unknown, { ctx }: Ctx): string | null {
+  username(ctx: UserContext): string | null {
     return ctx.username;
   }
 }
 
 /**
  * The currently authenticated user, if any.
- * @gqlField
+ * @gqlQueryField
  */
-export function me(_: Query): UserResolver | null {
+export function me(): UserResolver | null {
   return new UserResolver();
 }

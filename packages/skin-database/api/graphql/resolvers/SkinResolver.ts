@@ -1,17 +1,11 @@
 import { Int } from "grats";
-import { Ctx } from "..";
 import SkinModel from "../../../data/SkinModel";
 import UserContext from "../../../data/UserContext";
 import ClassicSkinResolver from "./ClassicSkinResolver";
 import { ISkin } from "./CommonSkinResolver";
 import ModernSkinResolver from "./ModernSkinResolver";
-import { Query } from "./QueryResolver";
-import algoliasearch from "algoliasearch";
 import * as Skins from "../../../data/skins";
-
-// These keys are already in the web client, so they are not secret at all.
-const client = algoliasearch("HQ9I5Z6IM5", "6466695ec3f624a5fccf46ec49680e51");
-const index = client.initIndex("Skins");
+import { knex } from "../../../db";
 
 export default class SkinResolver {
   constructor() {
@@ -35,12 +29,11 @@ export default class SkinResolver {
 
 /**
  * Get a skin by its MD5 hash
- * @gqlField
+ * @gqlQueryField
  */
 export async function fetch_skin_by_md5(
-  _: Query,
-  { md5 }: { md5: string },
-  { ctx }: Ctx
+  md5: string,
+  ctx: UserContext
 ): Promise<ISkin | null> {
   const skin = await SkinModel.fromMd5(ctx, md5);
   if (skin == null) {
@@ -53,42 +46,79 @@ export async function fetch_skin_by_md5(
  * Search the database using the Algolia search index used by the Museum.
  *
  * Useful for locating a particular skin.
- * @gqlField
+ * @gqlQueryField
  */
 export async function search_skins(
-  _: Query,
-  {
-    query,
-    first = 10,
-    offset = 0,
-  }: { query: string; first?: Int; offset?: Int },
-  { ctx }: Ctx
+  query: string,
+  first: Int = 10,
+  offset: Int = 0,
+  ctx: UserContext
 ): Promise<Array<ISkin | null>> {
   if (first > 1000) {
     throw new Error("Can only query 1000 records via search.");
   }
 
-  const results: { hits: { md5: string }[] } = await index.search(query, {
-    attributesToRetrieve: ["md5"],
-    length: first,
-    offset,
-  });
+  const skins = await knex("skin_search")
+    .select("skin_md5")
+    .leftJoin("skins", "skin_search.skin_md5", "skins.md5")
+    .where("skins.skin_type", "in", [1, 2])
+    .limit(first)
+    .offset(offset)
+    .whereRaw("skin_search MATCH ?", query);
 
   return Promise.all(
-    results.hits.map(async (hit) => {
-      const model = await SkinModel.fromMd5Assert(ctx, hit.md5);
+    skins.map(async (hit) => {
+      const model = await SkinModel.fromMd5Assert(ctx, hit.skin_md5);
       return SkinResolver.fromModel(model);
+    })
+  );
+}
+
+/**
+ * Search the database using SQLite's FTS (full text search) index.
+ *
+ * Useful for locating a particular skin.
+ * @gqlQueryField
+ */
+export async function search_classic_skins(
+  query: string,
+  first: Int = 10,
+  offset: Int = 0,
+  ctx: UserContext
+): Promise<Array<ClassicSkinResolver | null>> {
+  if (first > 1000) {
+    throw new Error("Can only query 1000 records via search.");
+  }
+
+  // const skins = await knex("skin_search")
+  //   .select("skin_search.skin_md5")
+  //   .leftJoin("skins", "skin_search.skin_md5", "skins.md5")
+  //   .leftJoin("skin_reviews", "skins.md5", "skin_reviews.skin_md5")
+  //   .where("skins.skin_type", "=", 1)
+  //   .orderByRaw("CASE WHEN skin_reviews.review = 'NSFW' THEN 1 ELSE 0 END")
+  //   .limit(first)
+  //   .offset(offset)
+  //   .whereRaw("skin_search MATCH ?", query);
+
+  const skins = await knex("skin_search")
+    .select("skin_md5")
+    .leftJoin("skins", "skin_search.skin_md5", "skins.md5")
+    .where("skins.skin_type", "=", 1)
+    .limit(first)
+    .offset(offset)
+    .whereRaw("skin_search MATCH ?", query);
+
+  return Promise.all(
+    skins.map(async (hit) => {
+      const model = await SkinModel.fromMd5Assert(ctx, hit.skin_md5);
+      return new ClassicSkinResolver(model);
     })
   );
 }
 /**
  * A random skin that needs to be reviewed
- * @gqlField */
-export async function skin_to_review(
-  _: Query,
-  _args: unknown,
-  { ctx }: Ctx
-): Promise<ISkin | null> {
+ * @gqlQueryField */
+export async function skin_to_review(ctx: UserContext): Promise<ISkin | null> {
   if (!ctx.authed()) {
     return null;
   }

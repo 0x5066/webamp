@@ -1,21 +1,7 @@
 import { clamp } from "../utils";
-import {
-  SEEK_TO_PERCENT_COMPLETE,
-  SET_BALANCE,
-  SET_VOLUME,
-  STOP,
-  TOGGLE_REPEAT,
-  TOGGLE_SHUFFLE,
-  PLAY,
-  PAUSE,
-  PLAY_TRACK,
-  TOGGLE_TIME_MODE,
-  BUFFER_TRACK,
-  IS_STOPPED,
-} from "../actionTypes";
 
 import { MEDIA_STATUS } from "../constants";
-import { openMediaFileDialog } from "./";
+import { openMediaFileDialog } from "./files";
 import { GetState, Dispatch, Thunk, Action } from "../types";
 import * as Selectors from "../selectors";
 
@@ -24,15 +10,15 @@ export function playTrack(id: number): Thunk {
     const state = getState();
     const isStopped = Selectors.getMediaStatus(state) === MEDIA_STATUS.STOPPED;
     if (isStopped) {
-      dispatch({ type: BUFFER_TRACK, id });
+      dispatch({ type: "BUFFER_TRACK", id });
     } else {
-      dispatch({ type: PLAY_TRACK, id });
+      dispatch({ type: "PLAY_TRACK", id });
     }
   };
 }
 
 export function playTrackNow(id: number): Action {
-  return { type: PLAY_TRACK, id };
+  return { type: "PLAY_TRACK", id };
 }
 
 export function play(): Thunk {
@@ -45,7 +31,7 @@ export function play(): Thunk {
     ) {
       dispatch(openMediaFileDialog());
     } else {
-      dispatch({ type: PLAY });
+      dispatch({ type: "PLAY" });
     }
   };
 }
@@ -54,22 +40,22 @@ export function pause(): Thunk {
   return (dispatch, getState) => {
     const { status } = getState().media;
     if (status === MEDIA_STATUS.PLAYING) {
-      dispatch({ type: PAUSE });
+      dispatch({ type: "PAUSE" });
     } else {
-      dispatch({ type: PLAY });
+      dispatch({ type: "PLAY" });
     }
   };
 }
 
 export function stop(): Action {
-  return { type: STOP };
+  return { type: "STOP" };
 }
 
 export function nextN(n: number): Thunk {
   return (dispatch, getState) => {
     const nextTrackId = Selectors.getNextTrackId(getState(), n);
     if (nextTrackId == null) {
-      dispatch({ type: IS_STOPPED });
+      dispatch({ type: "IS_STOPPED" });
       return;
     }
     dispatch(playTrack(nextTrackId));
@@ -92,7 +78,7 @@ export function seekToTime(seconds: number): Thunk {
       return;
     }
     dispatch({
-      type: SEEK_TO_PERCENT_COMPLETE,
+      type: "SEEK_TO_PERCENT_COMPLETE",
       percent: (seconds / duration) * 100,
     });
   };
@@ -110,7 +96,7 @@ export function seekBackward(seconds: number): Thunk {
 
 export function setVolume(volume: number): Action {
   return {
-    type: SET_VOLUME,
+    type: "SET_VOLUME",
     volume: clamp(volume, 0, 100),
   };
 }
@@ -122,11 +108,11 @@ export function adjustVolume(volumeDiff: number): Thunk {
   };
 }
 
-export function scrollVolume(e: React.WheelEvent<HTMLDivElement>): Thunk {
+export function scrollVolume(e: WheelEvent): Thunk {
   e.preventDefault();
   return (dispatch, getState) => {
     const currentVolume = getState().media.volume;
-    // Using pixels as percentage difference here is a bit arbirary, but... oh well.
+    // Using pixels as percentage difference here is a bit arbitrary, but... oh well.
     return dispatch(setVolume(currentVolume + e.deltaY));
   };
 }
@@ -138,19 +124,19 @@ export function setBalance(balance: number): Action {
     balance = 0;
   }
   return {
-    type: SET_BALANCE,
+    type: "SET_BALANCE",
     balance,
   };
 }
 
 export function toggleRepeat(): Action {
-  return { type: TOGGLE_REPEAT };
+  return { type: "TOGGLE_REPEAT" };
 }
 
 export function toggleShuffle(): Action {
-  return { type: TOGGLE_SHUFFLE };
+  return { type: "TOGGLE_SHUFFLE" };
 }
 
 export function toggleTimeMode(): Action {
-  return { type: TOGGLE_TIME_MODE };
+  return { type: "TOGGLE_TIME_MODE" };
 }

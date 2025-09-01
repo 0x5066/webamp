@@ -8,7 +8,6 @@ import {
   WindowPositions,
   PlaylistStyle,
   TransitionType,
-  MediaStatus,
   TimeMode,
   SkinImages,
   Cursors,
@@ -16,6 +15,8 @@ import {
   GenLetterWidths,
   MilkdropMessage,
   DummyVizData,
+  PlayerMediaStatus,
+  MediaStatus,
 } from "./types";
 import { createSelector, defaultMemoize } from "reselect";
 import * as Utils from "./utils";
@@ -29,6 +30,7 @@ import {
   MEDIA_TAG_REQUEST_STATUS,
   WINDOWS,
   VISUALIZERS,
+  PLAYER_MEDIA_STATUS,
 } from "./constants";
 import { createPlaylistURL } from "./playlistHtml";
 import * as fromTracks from "./reducers/tracks";
@@ -43,13 +45,20 @@ import { SerializedStateV1 } from "./serializedStates/v1Types";
 export const getSliders = (state: AppState) => state.equalizer.sliders;
 
 export const getEqfData = createSelector(getSliders, (sliders) => {
-  const preset: { [key: string]: number | string } = {
+  const preset = {
     name: "Entry1",
     preamp: Utils.denormalizeEqBand(sliders.preamp),
+    hz60: Utils.denormalizeEqBand(sliders[60]),
+    hz170: Utils.denormalizeEqBand(sliders[170]),
+    hz310: Utils.denormalizeEqBand(sliders[310]),
+    hz600: Utils.denormalizeEqBand(sliders[600]),
+    hz1000: Utils.denormalizeEqBand(sliders[1000]),
+    hz3000: Utils.denormalizeEqBand(sliders[3000]),
+    hz6000: Utils.denormalizeEqBand(sliders[6000]),
+    hz12000: Utils.denormalizeEqBand(sliders[12000]),
+    hz14000: Utils.denormalizeEqBand(sliders[14000]),
+    hz16000: Utils.denormalizeEqBand(sliders[16000]),
   };
-  BANDS.forEach((band) => {
-    preset[`hz${band}`] = Utils.denormalizeEqBand(sliders[band]);
-  });
   const eqfData = {
     presets: [preset],
     type: "Winamp EQ library file v1.1",
@@ -74,6 +83,12 @@ export const getOrderedTracks = createSelector(
   getTracks,
   getTrackOrder,
   (tracks, trackOrder) => trackOrder.filter((id) => tracks[id])
+);
+
+export const getPlaylistTracks = createSelector(
+  getTracks,
+  getTrackOrder,
+  (tracks, trackOrder) => trackOrder.map((id) => tracks[id]).filter(Boolean)
 );
 
 export const getUserTracks = createSelector(
@@ -101,13 +116,20 @@ const getOrderedTrackObjects = createSelector(
   (tracks, trackOrder): PlaylistTrack[] => trackOrder.map((id) => tracks[id])
 );
 
-export const getSelectedTrackIds = (state: AppState): Set<number> => {
+export const getSelectedTrackIds = (state: AppState): Array<number> => {
   return state.playlist.selectedTracks;
 };
 
+export const getSelectedTrackIdsSet = createSelector(
+  getSelectedTrackIds,
+  (selectedTrackArray): Set<number> => {
+    return new Set(selectedTrackArray);
+  }
+);
+
 export const getSelectedTrackObjects = createSelector(
   getOrderedTrackObjects,
-  getSelectedTrackIds,
+  getSelectedTrackIdsSet,
   (tracks, selectedIds) => tracks.filter((track) => selectedIds.has(track.id))
 );
 
@@ -135,7 +157,7 @@ export const getRunningTimeMessage = createSelector(
     )}`
 );
 
-// TODO: use slectors to get memoization
+// TODO: use selectors to get memoization
 export const getCurrentTrackIndex = (state: AppState): number => {
   const { playlist } = state;
   if (playlist.currentTrack == null) {
@@ -331,10 +353,27 @@ export const getCurrentTrackDisplayName = createSelector(
     return getName(id);
   }
 );
-
-export const getMediaStatus = (state: AppState): MediaStatus => {
+export const getPlayerMediaStatus = (state: AppState): PlayerMediaStatus => {
   return state.media.status;
 };
+
+export const getMediaStatus = createSelector(
+  getPlayerMediaStatus,
+  (status: PlayerMediaStatus): MediaStatus => {
+    switch (status) {
+      case "PLAYING":
+      case "PAUSED":
+        return status;
+      case "STOPPED":
+      case "ENDED":
+      case "CLOSED":
+        return "STOPPED";
+      default:
+        const s: never = status;
+        throw new Error(`Unknown media status: ${s}`);
+    }
+  }
+);
 
 export const getMediaIsPlaying = (state: AppState) =>
   state.media.status === MEDIA_STATUS.PLAYING;
@@ -660,6 +699,11 @@ export const getKhz = createSelector(
 
 export function getMilkdropMessage(state: AppState): MilkdropMessage | null {
   return state.milkdrop.message;
+}
+
+// Has Butterchurn been injected?
+export function getMilkdropEnabled(state: AppState): boolean {
+  return state.windows.milkdropEnabled;
 }
 
 export function getMilkdropWindowEnabled(state: AppState): boolean {

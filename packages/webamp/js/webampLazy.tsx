@@ -1,4 +1,5 @@
 import * as React from "react";
+import type JSZip from "jszip";
 import ReactDOM from "react-dom/client";
 import { Provider } from "react-redux";
 
@@ -12,53 +13,50 @@ import {
   PartialState,
   Options,
   MediaStatus,
+  PlaylistTrack,
+  PlayerMediaStatus,
+  IMetadataApi,
+  Preset,
 } from "./types";
 import getStore from "./store";
 import App from "./components/App";
 import { bindHotkeys } from "./hotkeys";
-import Media from "./media";
+import Media, { IMedia, IMediaClass } from "./media";
 import * as Selectors from "./selectors";
 import * as Actions from "./actionCreators";
 
 import { LOAD_STYLE } from "./constants";
 import * as FileUtils from "./fileUtils";
 
-import {
-  SET_AVAILABLE_SKINS,
-  NETWORK_CONNECTED,
-  NETWORK_DISCONNECTED,
-  CLOSE_WINAMP,
-  MINIMIZE_WINAMP,
-  LOADED,
-  SET_Z_INDEX,
-  CLOSE_REQUESTED,
-  ENABLE_MILKDROP,
-} from "./actionTypes";
 import Emitter from "./emitter";
 
 import { SerializedStateV1 } from "./serializedStates/v1Types";
 import Disposable from "./Disposable";
+import enableMediaSession from "./mediaSession.js";
 
 export interface PrivateOptions {
   __initialState?: PartialState;
   __customMiddlewares?: Middleware[];
   __butterchurnOptions?: ButterchurnOptions;
   // This is used by https://winampify.io/ to proxy through to Spotify's API.
-  __customMediaClass?: typeof Media; // This should have the same interface as Media
+  __customMediaClass?: IMediaClass;
 }
 
 export interface InjectableDependencies {
-  requireJSZip: () => Promise<any>; // TODO: Type JSZip
-  requireMusicMetadata: () => Promise<any>; // TODO: Type music-metadata-browser
+  requireJSZip: () => Promise<JSZip>;
+  requireMusicMetadata: () => Promise<IMetadataApi>;
+  requireButterchurnPresets?: () => Promise<Preset[]>;
 }
 
 class Webamp {
-  static VERSION = "1.5.0";
+  static VERSION = "2.2.0";
   _actionEmitter: Emitter;
   _root: ReactDOM.Root | null;
   _disposable: Disposable;
-  options: Options & PrivateOptions & InjectableDependencies; // TODO: Make this _private
-  media: Media; // TODO: Make this _private
+  // TODO: Make this _private
+  options: Options & PrivateOptions & InjectableDependencies;
+
+  media: IMedia; // TODO: Make this _private
   store: Store; // TODO: Make this _private
 
   /**
@@ -90,6 +88,7 @@ class Webamp {
       zIndex,
       requireJSZip,
       requireMusicMetadata,
+      requireButterchurnPresets,
       handleTrackDropEvent,
       handleAddUrlEvent,
       handleLoadListEvent,
@@ -99,11 +98,22 @@ class Webamp {
       __customMediaClass,
     } = this.options;
 
-    // TODO: Make this much cleaner
+    const butterchurnOptions = __butterchurnOptions;
+
+    if (requireButterchurnPresets != null) {
+      if (butterchurnOptions == null) {
+        throw new Error(
+          "You must pass `__butterchurnOptions` if you are using `requireButterchurnPresets`."
+        );
+      }
+      butterchurnOptions.getPresets = requireButterchurnPresets;
+    }
+
+    // TODO: Make this much cleaner.
     let convertPreset = null;
-    if (__butterchurnOptions != null) {
+    if (butterchurnOptions != null) {
       const { importConvertPreset, presetConverterEndpoint } =
-        __butterchurnOptions;
+        butterchurnOptions;
 
       if (importConvertPreset != null && presetConverterEndpoint != null) {
         convertPreset = async (file: File): Promise<Object> => {
@@ -116,7 +126,7 @@ class Webamp {
       }
     }
 
-    // TODO: Validate required options
+    // TODO: Validate required options.
 
     this.media = new (__customMediaClass || Media)();
     this.store = getStore(
@@ -128,7 +138,7 @@ class Webamp {
         requireJSZip,
         requireMusicMetadata,
         convertPreset,
-        // @ts-ignore Typescript is drunk
+        // @ts-ignore Typescript is drunk.
         handleTrackDropEvent,
         handleAddUrlEvent,
         handleLoadListEvent,
@@ -136,33 +146,36 @@ class Webamp {
       }
     ) as Store;
 
+    if (options.enableMediaSession) {
+      enableMediaSession(this);
+    }
+
     if (enableDoubleSizeMode) {
       this.store.dispatch(Actions.toggleDoubleSizeMode());
     }
 
     if (navigator.onLine) {
-      this.store.dispatch({ type: NETWORK_CONNECTED });
+      this.store.dispatch({ type: "NETWORK_CONNECTED" });
     } else {
-      this.store.dispatch({ type: NETWORK_DISCONNECTED });
+      this.store.dispatch({ type: "NETWORK_DISCONNECTED" });
     }
 
     if (zIndex != null) {
-      this.store.dispatch({ type: SET_Z_INDEX, zIndex });
+      this.store.dispatch({ type: "SET_Z_INDEX", zIndex });
     }
 
-    if (options.__butterchurnOptions) {
+    if (butterchurnOptions) {
       this.store.dispatch({
-        type: ENABLE_MILKDROP,
-        open: options.__butterchurnOptions.butterchurnOpen,
+        type: "ENABLE_MILKDROP",
+        open: butterchurnOptions.butterchurnOpen,
       });
-      this.store.dispatch(
-        Actions.initializePresets(options.__butterchurnOptions)
-      );
+      this.store.dispatch(Actions.initializePresets(butterchurnOptions));
     }
 
-    const handleOnline = () => this.store.dispatch({ type: NETWORK_CONNECTED });
+    const handleOnline = () =>
+      this.store.dispatch({ type: "NETWORK_CONNECTED" });
     const handleOffline = () =>
-      this.store.dispatch({ type: NETWORK_DISCONNECTED });
+      this.store.dispatch({ type: "NETWORK_DISCONNECTED" });
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -176,7 +189,7 @@ class Webamp {
       this.store.dispatch(Actions.setSkinFromUrl(initialSkin.url));
     } else {
       // We are using the default skin.
-      this.store.dispatch({ type: LOADED });
+      this.store.dispatch({ type: "LOADED" });
     }
 
     if (initialTracks) {
@@ -189,9 +202,16 @@ class Webamp {
         "The misspelled option `avaliableSkins` is deprecated. Please use `availableSkins` instead."
       );
       // @ts-ignore
-      this.store.dispatch({ type: SET_AVAILABLE_SKINS, skins: avaliableSkins });
+      this.store.dispatch({
+        type: "SET_AVAILABLE_SKINS",
+        // @ts-ignore
+        skins: options.avaliableSkins,
+      });
     } else if (availableSkins != null) {
-      this.store.dispatch({ type: SET_AVAILABLE_SKINS, skins: availableSkins });
+      this.store.dispatch({
+        type: "SET_AVAILABLE_SKINS",
+        skins: availableSkins,
+      });
     }
 
     this.store.dispatch(Actions.setWindowLayout(options.windowLayout));
@@ -202,66 +222,106 @@ class Webamp {
   }
 
   /**
-   * Play the current tack
+   * Play the current track.
    */
   play(): void {
     this.store.dispatch(Actions.play());
   }
 
   /**
-   * Pause the current tack
+   * Pause the current track.
    */
   pause(): void {
     this.store.dispatch(Actions.pause());
   }
 
   /**
-   * Stop the currently playing audio. Equivalent to pressing the "stop" button
+   * Stop the currently playing audio. Equivalent to pressing the "stop" button.
    */
   stop(): void {
     this.store.dispatch(Actions.stop());
   }
 
   /**
-   * Set volume from 0 - 100
+   * Set volume from 0 - 100.
    */
   setVolume(volume: number): void {
     this.store.dispatch(Actions.setVolume(volume));
   }
 
   /**
-   * Seek backward n seconds in the curent track
+   * Seek backward n seconds in the current track.
    */
   seekBackward(seconds: number) {
     this.store.dispatch(Actions.seekBackward(seconds));
   }
 
   /**
-   * Seek forward n seconds in the curent track
+   * Seek forward n seconds in the current track.
    */
   seekForward(seconds: number) {
     this.store.dispatch(Actions.seekForward(seconds));
   }
 
   /**
-   * Seek to a given time within the current track
+   * Seek to a given time within the current track.
    */
   seekToTime(seconds: number) {
     this.store.dispatch(Actions.seekToTime(seconds));
   }
 
   /**
-   * Play the next track
+   * Check if shuffle is enabled.
+   */
+  isShuffleEnabled(): boolean {
+    return Selectors.getShuffle(this.store.getState());
+  }
+
+  /**
+   * Toggle shuffle mode between enabled and disabled.
+   */
+  toggleShuffle(): void {
+    this.store.dispatch(Actions.toggleShuffle());
+  }
+
+  /**
+   * Check if repeat is enabled.
+   */
+  isRepeatEnabled(): boolean {
+    return Selectors.getRepeat(this.store.getState());
+  }
+
+  /**
+   * Toggle repeat mode between enabled and disabled.
+   */
+  toggleRepeat(): void {
+    this.store.dispatch(Actions.toggleRepeat());
+  }
+
+  /**
+   * Play the next track.
    */
   nextTrack(): void {
     this.store.dispatch(Actions.next());
   }
 
   /**
-   * Play the previous track
+   * Play the previous track.
    */
   previousTrack(): void {
     this.store.dispatch(Actions.previous());
+  }
+
+  /**
+   * Set the current track to a specific track in the playlist by zero-based index.
+   *
+   * Note: If Webamp is currently playing, the track will begin playing. If
+   * Webamp is not playing, the track will not start playing. You can use
+   * `webamp.pause()` before calling this method or `webamp.play()` after
+   * calling this method to control whether the track starts playing.
+   */
+  setCurrentTrack(index: number): void {
+    this.store.dispatch(Actions.playTrack(index));
   }
 
   /**
@@ -282,10 +342,27 @@ class Webamp {
   }
 
   /**
+   * Get the current playlist in order.
+   */
+  getPlaylistTracks(): PlaylistTrack[] {
+    return Selectors.getPlaylistTracks(this.store.getState());
+  }
+
+  /**
    * Get the current "playing" status.
    */
-  getMediaStatus(): MediaStatus | null {
+  getMediaStatus(): MediaStatus {
     return Selectors.getMediaStatus(this.store.getState());
+  }
+
+  /**
+   * Get the current "playing" status of the player. Similar to
+   * `getMediaStatus()`, but can differentiate between different reasons why the
+   * player might not be playing, such as "ENDED" when the end of the playlist
+   * has been reached or "CLOSED" when the player has been closed.
+   */
+  getPlayerMediaStatus(): PlayerMediaStatus {
+    return Selectors.getPlayerMediaStatus(this.store.getState());
   }
 
   /**
@@ -296,8 +373,8 @@ class Webamp {
    * @returns An "unsubscribe" function. Useful if at some point in the future you want to stop listening to these events.
    */
   onWillClose(cb: (cancel: () => void) => void): () => void {
-    return this._actionEmitter.on(CLOSE_REQUESTED, (action) => {
-      cb(action.cancel);
+    return this._actionEmitter.on("CLOSE_REQUESTED", (action) => {
+      cb((action as any).cancel);
     });
   }
 
@@ -307,11 +384,11 @@ class Webamp {
    * @returns An "unsubscribe" function. Useful if at some point in the future you want to stop listening to these events.
    */
   onClose(cb: () => void): () => void {
-    return this._actionEmitter.on(CLOSE_WINAMP, cb);
+    return this._actionEmitter.on("CLOSE_WINAMP", cb);
   }
 
   /**
-   * Equivalent to selection "Close" from Webamp's options menu. Once closed,
+   * Equivalent to selecting "Close" from Webamp's options menu. Once closed,
    * you can open it again with `.reopen()`.
    */
   close(): void {
@@ -328,16 +405,19 @@ class Webamp {
   /**
    * A callback which will be called when a new track starts loading.
    *
-   * This can happen on startup when the first track starts buffering, or when a subsequent track starts playing.
-   * The callback will be called with an object `({url: 'https://example.com/track.mp3'})` containing the URL of the track.
+   * This can happen on startup when the first track starts buffering, or when a
+   * subsequent track starts playing.  The callback will be called with an
+   * object `({url: 'https://example.com/track.mp3'})` containing the URL of the
+   * track.
+   *
    * Note: If the user drags in a track, the URL may be an ObjectURL.
    *
-   * @returns An "unsubscribe" function. Useful if at some point in the future you want to stop listening to these events.
+   * @returns An "unsubscribe" function. Useful if at some point in the future
+   * you want to stop listening to these events.
    */
   onTrackDidChange(cb: (trackInfo: LoadedURLTrack | null) => void): () => void {
     let previousTrackId: number | null = null;
-    // TODO #leak
-    return this.store.subscribe(() => {
+    const unsubscribe = this.store.subscribe(() => {
       const state = this.store.getState();
       const trackId = Selectors.getCurrentlyPlayingTrackIdIfLoaded(state);
       if (trackId === previousTrackId) {
@@ -346,6 +426,11 @@ class Webamp {
       previousTrackId = trackId;
       cb(trackId == null ? null : Selectors.getCurrentTrackInfo(state));
     });
+
+    // Register cleanup with disposable
+    this._disposable.add(unsubscribe);
+
+    return unsubscribe;
   }
 
   /**
@@ -354,7 +439,7 @@ class Webamp {
    * @returns An "unsubscribe" function. Useful if at some point in the future you want to stop listening to these events.
    */
   onMinimize(cb: () => void): () => void {
-    return this._actionEmitter.on(MINIMIZE_WINAMP, cb);
+    return this._actionEmitter.on("MINIMIZE_WINAMP", cb);
   }
 
   /**
@@ -375,8 +460,7 @@ class Webamp {
    */
   async skinIsLoaded(): Promise<void> {
     // Wait for the skin to load.
-    // TODO #leak
-    await storeHas(this.store, (state) => !state.display.loading);
+    await this.storeHas((state) => !state.display.loading);
     // We attempt to pre-resolve these promises before we declare the skin
     // loaded. That's because `<EqGraph>` needs these in order to render fully.
     // As long as these are resolved before we attempt to render, we can ensure
@@ -416,11 +500,22 @@ class Webamp {
       }
     });
 
+    let onMount: (() => void) | undefined;
+    const mountPromise = new Promise<void>((resolve) => {
+      onMount = resolve;
+    });
+
     this._root.render(
       <Provider store={this.store}>
-        <App media={this.media} filePickers={this.options.filePickers || []} />
+        <App
+          media={this.media}
+          filePickers={this.options.filePickers || []}
+          onMount={onMount}
+          parentDomNode={document.body}
+        />
       </Provider>
     );
+    await mountPromise;
   }
 
   /**
@@ -433,8 +528,6 @@ class Webamp {
    * attempt to clean itself up to avoid memory leaks.
    */
   dispose(): void {
-    // TODO: Clean up store subscription in onTrackDidChange
-    // TODO: Every storeHas call represents a potential race condition
     this.media.dispose();
     this._actionEmitter.dispose();
     this._disposable.dispose();
@@ -449,8 +542,42 @@ class Webamp {
   }
 
   __onStateChange(cb: () => void): () => void {
-    // TODO #leak
-    return this.store.subscribe(cb);
+    const unsubscribe = this.store.subscribe(cb);
+
+    // Register cleanup with disposable
+    this._disposable.add(unsubscribe);
+
+    return unsubscribe;
+  }
+
+  /**
+   * Wait for the store to match a predicate condition.
+   * Returns a promise that resolves when the condition is met.
+   * If the instance is disposed, the promise will be rejected.
+   */
+  private storeHas(predicate: (state: AppState) => boolean): Promise<void> {
+    let unsubscribed = false;
+    return new Promise((resolve, reject) => {
+      if (predicate(this.store.getState())) {
+        resolve();
+        return;
+      }
+      const unsubscribe = this.store.subscribe(() => {
+        if (predicate(this.store.getState())) {
+          unsubscribed = true;
+          unsubscribe();
+          resolve();
+        }
+      });
+
+      // Register cleanup with disposable
+      this._disposable.add(() => {
+        if (!unsubscribed) {
+          unsubscribe();
+          reject(new Error("Store was disposed before condition was met."));
+        }
+      });
+    });
   }
 
   _bufferTracks(tracks: Track[]): void {
@@ -460,25 +587,6 @@ class Webamp {
     );
   }
 }
-
-// Return a promise that resolves when the store matches a predicate.
-// TODO #leak
-const storeHas = (
-  store: Store,
-  predicate: (state: AppState) => boolean
-): Promise<void> =>
-  new Promise((resolve) => {
-    if (predicate(store.getState())) {
-      resolve();
-      return;
-    }
-    const unsubscribe = store.subscribe(() => {
-      if (predicate(store.getState())) {
-        resolve();
-        unsubscribe();
-      }
-    });
-  });
 
 // @ts-ignore
 window.Webamp = Webamp;

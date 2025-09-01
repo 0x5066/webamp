@@ -33,6 +33,8 @@ import { program } from "commander";
 import * as config from "./config";
 import { setHashesForSkin } from "./skinHash";
 import * as S3 from "./s3";
+import { generateDescription } from "./services/openAi";
+import KeyValue from "./data/KeyValue";
 
 async function withHandler(
   cb: (handler: DiscordEventHandler) => Promise<void>
@@ -110,6 +112,12 @@ program
       "CloudFlare cache and seach index entries."
   )
   .option(
+    "--purge",
+    "Purge a skin from the database, including its S3 files " +
+      "CloudFlare cache and seach index entries. " +
+      "Also prevents it from being uploaded again."
+  )
+  .option(
     "--hide",
     "Hide a skin from the museum main page. Useful for removing aparent dupes."
   )
@@ -123,14 +131,44 @@ program
     "--refresh",
     "Retake the screenshot of a skin and update the database."
   )
+  .option("--refresh-archive-files")
   .option("--reject", 'Give a skin a "rejected" review.')
   .option("--metadata", "Push metadata to the archive.")
+  .option("--ai", "Use AI to generate a text description of the skin.")
   .action(
     async (
       md5,
-      { delete: del, deleteLocal, index, refresh, reject, metadata, hide }
+      {
+        delete: del,
+        deleteLocal,
+        index,
+        refresh,
+        reject,
+        metadata,
+        hide,
+        purge,
+        refreshArchiveFiles,
+        ai,
+      }
     ) => {
       const ctx = new UserContext("CLI");
+      if (ai) {
+        const skin = await SkinModel.fromMd5Assert(ctx, md5);
+        const description = await generateDescription(skin);
+        console.log("Generated description for", await skin.getFileName());
+        console.log("====================================");
+        console.log(description);
+        console.log("====================================");
+      }
+      if (purge) {
+        // cat purge | xargs -I {} yarn cli skin --purge {}
+        await Skins.deleteSkin(md5);
+        const purgedArr: string[] = (await KeyValue.get("purged")) || [];
+        const purged = new Set(purgedArr);
+        purged.add(md5);
+
+        await KeyValue.set("purged", Array.from(purged));
+      }
       if (del) {
         await Skins.deleteSkin(md5);
       }
@@ -155,6 +193,13 @@ program
         await SyncToArchive.updateMetadata(skin);
         console.log("Updated Metadata");
       }
+      if (refreshArchiveFiles) {
+        const skin = await SkinModel.fromMd5Assert(ctx, md5);
+        if (skin == null) {
+          throw new Error("Can't find skin");
+        }
+        await setHashesForSkin(skin);
+      }
     }
   );
 
@@ -175,14 +220,21 @@ program
     if (screenshot) {
       const buffer = fs.readFileSync(filePath);
       const md5 = md5Buffer(buffer);
-      const tempPath = temp.path({ suffix: ".png" });
+      const tempSkinFile = temp.path({ suffix: ".wsz" });
+      const tempScreenshotPath = temp.path({ suffix: ".png" });
+
+      // Write buffer to temporary file as Puppeteer's uploadFile expects a file path
+      fs.writeFileSync(tempSkinFile, new Uint8Array(buffer));
+
       await Shooter.withShooter(
         async (shooter: Shooter) => {
-          await shooter.takeScreenshot(buffer, tempPath, { md5 });
+          await shooter.takeScreenshot(tempSkinFile, tempScreenshotPath, {
+            md5,
+          });
         },
         (message: string) => console.log(message)
       );
-      console.log("Screenshot complete", tempPath);
+      console.log("Screenshot complete", tempScreenshotPath);
     }
   });
 
@@ -342,6 +394,8 @@ program
     "--compute-museum-order",
     "Compute the order in which skins should be displayed in the museum"
   )
+  .option("--foo", "Learn about missing skins")
+  .option("--test-cloudflare", "Try to upload to cloudflare")
   .action(async (arg) => {
     const {
       uploadIaScreenshot,
@@ -351,7 +405,13 @@ program
       updateSearchIndex,
       configureR2Cors,
       computeMuseumOrder,
+      foo,
+      testCloudflare,
     } = arg;
+    if (testCloudflare) {
+      const buffer = new Buffer("testing", "utf8");
+      await S3.putTemp("hello", buffer);
+    }
     if (computeMuseumOrder) {
       await Skins.computeMuseumOrder();
       console.log("Museum order updated.");
@@ -396,6 +456,24 @@ program
         console.log("Did not upload screenshot");
       }
     }
+    if (foo) {
+      const ctx = new UserContext();
+      const missingModernSkins = await KeyValue.get<string[]>(
+        "missingModernSkins"
+      );
+      const missingModernSkinsSet = new Set(missingModernSkins);
+      for (const md5 of missingModernSkins!) {
+        const skin = await SkinModel.fromMd5(ctx, md5);
+        if (skin == null) {
+          continue;
+        }
+        missingModernSkinsSet.delete(md5);
+      }
+      await KeyValue.set(
+        "missingModernSkins",
+        Array.from(missingModernSkinsSet)
+      );
+    }
     if (refreshArchiveFiles) {
       const ctx = new UserContext();
       const skinRows = await knex("skins")
@@ -405,13 +483,21 @@ program
         .where((builder) => {
           return builder.where("file_info.file_md5", null);
         })
-        .limit(1000)
+        .limit(2000)
         .groupBy("skins.md5")
         .select();
       console.log(`Found ${skinRows.length} skins to update`);
+      const missingModernSkins = new Set(
+        await KeyValue.get<string[]>("missingModernSkins")
+      );
       const skins = skinRows.map((row) => new SkinModel(ctx, row));
       for (const skin of skins) {
         console.log("Working on", skin.getMd5(), await skin.getFileName());
+        if (missingModernSkins.has(skin.getMd5())) {
+          console.log("NOT skipping since this one is a missingModernSkin");
+          // continue
+        }
+
         try {
           await setHashesForSkin(skin);
         } catch (e) {

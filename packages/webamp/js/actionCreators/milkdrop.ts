@@ -1,13 +1,3 @@
-import {
-  GOT_BUTTERCHURN_PRESETS,
-  GOT_BUTTERCHURN,
-  SELECT_PRESET_AT_INDEX,
-  RESOLVE_PRESET_AT_INDEX,
-  PRESET_REQUESTED,
-  TOGGLE_RANDOMIZE_PRESETS,
-  TOGGLE_PRESET_CYCLING,
-  SCHEDULE_MILKDROP_MESSAGE,
-} from "../actionTypes";
 import * as Selectors from "../selectors";
 import {
   TransitionType,
@@ -49,8 +39,9 @@ function normalizePresetTypes(preset: Preset): StatePreset {
 export function initializePresets(presetOptions: ButterchurnOptions): Thunk {
   return async (dispatch) => {
     const { getPresets, importButterchurn } = presetOptions;
-    importButterchurn().then((butterchurn) => {
-      dispatch({ type: GOT_BUTTERCHURN, butterchurn: butterchurn.default });
+    importButterchurn().then((butterchurnModule) => {
+      const butterchurn = butterchurnModule.default ?? butterchurnModule;
+      dispatch({ type: "GOT_BUTTERCHURN", butterchurn });
     });
 
     const presets = await getPresets();
@@ -63,7 +54,7 @@ export function loadPresets(presets: StatePreset[]): Thunk {
   return (dispatch, getState) => {
     const state = getState();
     const presetsLength = state.milkdrop.presets.length;
-    dispatch({ type: GOT_BUTTERCHURN_PRESETS, presets });
+    dispatch({ type: "GOT_BUTTERCHURN_PRESETS", presets });
     if (presetsLength === 0 && Selectors.getRandomizePresets(state)) {
       dispatch(selectRandomPreset());
     } else {
@@ -170,16 +161,16 @@ export function requestPresetAtIndex(
       // Index might be out of range.
       return;
     }
-    dispatch({ type: PRESET_REQUESTED, index, addToHistory });
+    dispatch({ type: "PRESET_REQUESTED", index, addToHistory });
     switch (preset.type) {
       case "RESOLVED":
-        dispatch({ type: SELECT_PRESET_AT_INDEX, index, transitionType });
+        dispatch({ type: "SELECT_PRESET_AT_INDEX", index, transitionType });
         return;
       case "UNRESOLVED":
         const json = await preset.getPreset();
         // TODO: Ensure that this works correctly even if requests resolve out of order
-        dispatch({ type: RESOLVE_PRESET_AT_INDEX, index, json });
-        dispatch({ type: SELECT_PRESET_AT_INDEX, index, transitionType });
+        dispatch({ type: "RESOLVE_PRESET_AT_INDEX", index, json });
+        dispatch({ type: "SELECT_PRESET_AT_INDEX", index, transitionType });
         return;
     }
   };
@@ -190,13 +181,13 @@ export function handlePresetDrop(e: React.DragEvent): Thunk {
 }
 
 export function toggleRandomizePresets(): Action {
-  return { type: TOGGLE_RANDOMIZE_PRESETS };
+  return { type: "TOGGLE_RANDOMIZE_PRESETS" };
 }
 
 export function togglePresetCycling(): Action {
-  return { type: TOGGLE_PRESET_CYCLING };
+  return { type: "TOGGLE_PRESET_CYCLING" };
 }
 
 export function scheduleMilkdropMessage(message: string): Action {
-  return { type: SCHEDULE_MILKDROP_MESSAGE, message };
+  return { type: "SCHEDULE_MILKDROP_MESSAGE", message };
 }

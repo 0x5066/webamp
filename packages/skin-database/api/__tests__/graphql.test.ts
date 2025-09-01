@@ -1,19 +1,17 @@
-import { Application } from "express";
 import { knex } from "../../db";
-import request from "supertest"; // supertest is a framework that allows to easily test web apis
-import { createApp } from "../app";
 import SkinModel from "../../data/SkinModel";
 import * as S3 from "../../s3";
-import * as Auth from "../auth";
 import { processUserUploads } from "../processUserUploads";
 import UserContext from "../../data/UserContext";
-import { searchIndex } from "../../algolia";
+import { client } from "../../algolia";
+import { createYogaInstance } from "../../app/graphql/yoga";
+import { YogaServerInstance } from "graphql-yoga";
 jest.mock("../../s3");
 jest.mock("../../algolia");
 jest.mock("../processUserUploads");
 jest.mock("../auth");
 
-let app: Application;
+let yoga: YogaServerInstance<any, any>;
 const handler = jest.fn();
 const log = jest.fn();
 const logError = jest.fn();
@@ -23,16 +21,17 @@ let username: string | undefined;
 beforeEach(async () => {
   jest.clearAllMocks();
   username = "<MOCKED>";
-  app = createApp({
+  yoga = createYogaInstance({
     eventHandler: handler,
-    extraMiddleware: (req, res, next) => {
-      req.session.username = username;
-      next();
-    },
+    getUserContext: () => new UserContext(username),
     logger: { log, logError },
   });
   await knex.migrate.latest();
   await knex.seed.run();
+});
+
+afterAll(async () => {
+  await knex.destroy();
 });
 
 function gql(templateString: TemplateStringsArray): string {
@@ -40,9 +39,12 @@ function gql(templateString: TemplateStringsArray): string {
 }
 
 async function graphQLRequest(query: string, variables?: any) {
-  const { body } = await request(app)
-    .post("/graphql")
-    .send({ query, variables: variables ?? {} });
+  const response = await yoga.fetch("/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+  });
+  const body = await response.json();
   if (body.errors && body.errors.length) {
     for (const err of body.errors) {
       console.warn(err.message);
@@ -106,36 +108,6 @@ describe(".me", () => {
   });
 });
 
-test.skip("/auth", async () => {
-  const { body } = await request(app)
-    .get("/auth")
-    .expect(302)
-    .expect(
-      "Location",
-      "https://discord.com/api/oauth2/authorize?client_id=%3CDUMMY_DISCORD_CLIENT_ID%3E&redirect_uri=https%3A%2F%2Fapi.webampskins.org%2Fauth%2Fdiscord&response_type=code&scope=identify%20guilds"
-    );
-  expect(body).toEqual({});
-});
-
-describe.skip("/auth/discord", () => {
-  test("valid code", async () => {
-    const response = await request(app)
-      .get("/auth/discord")
-      .query({ code: "<A_FAKE_CODE>" })
-      .expect(302)
-      .expect("Location", "https://skins.webamp.org/review/");
-    // TODO: Assert that we get cookie headers. I think that will not work now
-    // because express does not think it's secure in a test env.
-    expect(Auth.auth).toHaveBeenCalledWith("<A_FAKE_CODE>");
-    expect(response.body).toEqual({});
-  });
-  test("missing code", async () => {
-    const { body } = await request(app).get("/auth/discord").expect(400);
-    expect(Auth.auth).not.toHaveBeenCalled();
-    expect(body).toEqual({ message: "Expected to get a code" });
-  });
-});
-
 describe("Query.skins", () => {
   test("no query params", async () => {
     const { data } = await graphQLRequest(
@@ -155,35 +127,35 @@ describe("Query.skins", () => {
       `
     );
     expect(data.skins).toMatchInlineSnapshot(`
-      Object {
+      {
         "count": 6,
-        "nodes": Array [
-          Object {
+        "nodes": [
+          {
             "filename": "tweeted.wsz",
             "md5": "a_tweeted_md5",
             "nsfw": false,
           },
-          Object {
+          {
             "filename": "Zelda_Amp_3.wsz",
             "md5": "48bbdbbeb03d347e59b1eebda4d352d0",
             "nsfw": false,
           },
-          Object {
+          {
             "filename": "path.wsz",
             "md5": "a_fake_md5",
             "nsfw": false,
           },
-          Object {
+          {
             "filename": "approved.wsz",
             "md5": "an_approved_md5",
             "nsfw": false,
           },
-          Object {
+          {
             "filename": "rejected.wsz",
             "md5": "a_rejected_md5",
             "nsfw": false,
           },
-          Object {
+          {
             "filename": "nsfw.wsz",
             "md5": "a_nsfw_md5",
             "nsfw": true,
@@ -211,15 +183,15 @@ describe("Query.skins", () => {
       { first: 2, offset: 1 }
     );
     expect(data.skins).toMatchInlineSnapshot(`
-      Object {
+      {
         "count": 6,
-        "nodes": Array [
-          Object {
+        "nodes": [
+          {
             "filename": "Zelda_Amp_3.wsz",
             "md5": "48bbdbbeb03d347e59b1eebda4d352d0",
             "nsfw": false,
           },
-          Object {
+          {
             "filename": "path.wsz",
             "md5": "a_fake_md5",
             "nsfw": false,
@@ -359,9 +331,10 @@ test("Mutation.mark_skin_nsfw", async () => {
     type: "MARKED_SKIN_NSFW",
     md5: "a_fake_md5",
   });
-  expect(searchIndex.partialUpdateObjects).toHaveBeenCalledWith([
-    { nsfw: true, objectID: "a_fake_md5" },
-  ]);
+  expect(client.partialUpdateObjects).toHaveBeenCalledWith({
+    indexName: "test-index",
+    objects: [{ nsfw: true, objectID: "a_fake_md5" }],
+  });
   expect(data).toEqual({ mark_skin_nsfw: true });
   const skin = await SkinModel.fromMd5(ctx, "a_fake_md5");
 

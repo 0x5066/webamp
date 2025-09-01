@@ -1,13 +1,13 @@
 import invariant from "invariant";
-import { IMusicMetadataBrowserApi } from "./types";
+import { IMetadataApi } from "./types";
 import { IAudioMetadata } from "music-metadata-browser"; // Import music-metadata type definitions
 import * as Utils from "./utils";
 
 type MediaDataType = string | ArrayBuffer | Blob;
 
-export function genMediaTags(
+export async function genMediaTags(
   file: MediaDataType,
-  musicMetadata: IMusicMetadataBrowserApi
+  musicMetadata: IMetadataApi
 ): Promise<IAudioMetadata> {
   invariant(
     file != null,
@@ -20,7 +20,40 @@ export function genMediaTags(
   };
 
   if (typeof file === "string") {
-    return musicMetadata.fetchFromUrl(file, options);
+    if (
+      "parseWebStream" in musicMetadata &&
+      typeof musicMetadata.parseWebStream === "function"
+    ) {
+      const response = await fetch(file);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch URL: ${file}, status: ${response.status}`
+        );
+      }
+
+      // https://github.com/Borewit/music-metadata/issues/2455
+      // There's currently an issue where some URLs will fail to parse id3 tags
+      // when using parseWebStream. This approach can work around it. However,
+      // My current assumption is that this is an issue mostly specific to that
+      // individual file and not a wide spread issue, but if we find it happens
+      // more broadly we can deopt to using parseBlob as below.
+
+      // const blob = await response.blob();
+      // return musicMetadata.parseBlob(blob, options);
+
+      const webStream = response.body;
+      if (webStream == null) {
+        throw new Error("Response body is null, cannot parse metadata.");
+      }
+      return musicMetadata.parseWebStream(webStream, undefined, options);
+    }
+    if (
+      "fetchFromUrl" in musicMetadata &&
+      typeof musicMetadata.fetchFromUrl === "function"
+    ) {
+      return musicMetadata.fetchFromUrl(file, options);
+    }
+    throw new Error("No suitable method available to parse URL");
   }
   // Assume Blob
   return musicMetadata.parseBlob(file as Blob, options);
@@ -36,16 +69,23 @@ export function genMediaDuration(url: string): Promise<number> {
     // got the duration?
     const audio = document.createElement("audio");
     audio.crossOrigin = "anonymous";
+
     const durationChange = () => {
       resolve(audio.duration);
       audio.removeEventListener("durationchange", durationChange);
+      audio.removeEventListener("error", errorHandler);
       audio.src = "";
       // TODO: Not sure if this really gets cleaned up.
     };
-    audio.addEventListener("durationchange", durationChange);
-    audio.addEventListener("error", (e) => {
+
+    const errorHandler = (e: Event) => {
+      audio.removeEventListener("durationchange", durationChange);
+      audio.removeEventListener("error", errorHandler);
       reject(e);
-    });
+    };
+
+    audio.addEventListener("durationchange", durationChange);
+    audio.addEventListener("error", errorHandler);
     audio.src = url;
   });
 }

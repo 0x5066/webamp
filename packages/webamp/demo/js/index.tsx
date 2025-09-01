@@ -1,3 +1,4 @@
+import React from "react";
 import * as Sentry from "@sentry/browser";
 import ReactDOM from "react-dom/client";
 // @ts-ignore
@@ -5,18 +6,10 @@ import isButterchurnSupported from "butterchurn/dist/isSupported.min";
 import { getWebampConfig } from "./webampConfig";
 import * as SoundCloud from "./SoundCloud";
 
-import {
-  WebampLazy,
-  DISABLE_MARQUEE,
-  TOGGLE_REPEAT,
-  TOGGLE_SHUFFLE,
-  SET_EQ_AUTO,
-  SET_DUMMY_VIZ_DATA,
-} from "./Webamp";
+import WebampLazy from "../../js/webampLazy";
 
 import { disableMarquee, skinUrl as configSkinUrl } from "./config";
 import DemoDesktop from "./DemoDesktop";
-import enableMediaSession from "./mediaSession";
 // import { choreograph } from "./choreography";
 
 declare global {
@@ -53,7 +46,7 @@ window.addEventListener("dragover", supressDragAndDrop);
 window.addEventListener("drop", supressDragAndDrop);
 
 try {
-  // TODO: Get this working in Parcel.
+  // TODO: Get this working in Vite.
   const COMMITHASH = undefined;
   Sentry.init({
     dsn: "https://12b6be8ef7c44f28ac37ab5ed98fd294@sentry.io/146021",
@@ -87,6 +80,7 @@ async function main() {
   }
   let soundcloudPlaylist = null;
   if (soundcloudPlaylistId != null) {
+    // @ts-ignore
     soundcloudPlaylist = await SoundCloud.getPlaylist(soundcloudPlaylistId);
   }
   const config = await getWebampConfig(screenshot, skinUrl, soundcloudPlaylist);
@@ -94,15 +88,15 @@ async function main() {
   const webamp = new WebampLazy(config);
 
   if (disableMarquee || screenshot) {
-    webamp.store.dispatch({ type: DISABLE_MARQUEE });
+    webamp.store.dispatch({ type: "DISABLE_MARQUEE" });
   }
   if (screenshot) {
     window.document.body.style.backgroundColor = "#000";
-    webamp.store.dispatch({ type: TOGGLE_REPEAT });
-    webamp.store.dispatch({ type: TOGGLE_SHUFFLE });
-    webamp.store.dispatch({ type: SET_EQ_AUTO, value: true });
+    webamp.store.dispatch({ type: "TOGGLE_REPEAT" });
+    webamp.store.dispatch({ type: "TOGGLE_SHUFFLE" });
+    webamp.store.dispatch({ type: "SET_EQ_AUTO", value: true });
     webamp.store.dispatch({
-      type: SET_DUMMY_VIZ_DATA,
+      type: "SET_DUMMY_VIZ_DATA",
       data: {
         0: 11.75,
         8: 11.0625,
@@ -130,8 +124,6 @@ async function main() {
         ? DEFAULT_DOCUMENT_TITLE
         : `${track.metaData.title} - ${track.metaData.artist} \u00B7 ${DEFAULT_DOCUMENT_TITLE}`;
   });
-
-  enableMediaSession(webamp);
 
   // Expose a file input in the DOM for testing.
   const fileInput = document.createElement("input");

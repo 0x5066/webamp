@@ -1,4 +1,4 @@
-import { ApiAction } from "./app";
+import { ApiAction } from "./types";
 import Discord, { TextChannel } from "discord.js";
 import * as Config from "../config";
 import SkinModel from "../data/SkinModel";
@@ -105,7 +105,7 @@ export default class DiscordEventHandler {
       case "SYNCED_TO_ARCHIVE": {
         const dest = await this.getChannel(Config.SKIN_UPLOADS_CHANNEL_ID);
 
-        const message = `Synced skins to archive.org. Success: ${action.successes.toLocaleString()} Errors: ${action.errors.toLocaleString()}.`;
+        const message = `Synced skins to archive.org. Success: ${action.successes.toLocaleString()} Errors: ${action.errors.toLocaleString()} Skipped: ${action.skips.toLocaleString()}.`;
 
         await dest.send(message);
         break;
@@ -172,7 +172,8 @@ export default class DiscordEventHandler {
         dest,
       });
     } else {
-      await DiscordUtils.sendAlreadyReviewed({ md5, dest });
+      // Too much nosie
+      // await DiscordUtils.sendAlreadyReviewed({ md5, dest });
     }
   }
 }

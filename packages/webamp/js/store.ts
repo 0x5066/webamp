@@ -4,12 +4,11 @@ import {
   Middleware as ReduxMiddleware,
 } from "redux";
 import thunk from "redux-thunk";
-import { composeWithDevTools } from "redux-devtools-extension";
+import { composeWithDevTools } from "@redux-devtools/extension";
 import reducer from "./reducers";
 import mediaMiddleware from "./mediaMiddleware";
 import { merge } from "./utils";
-import { UPDATE_TIME_ELAPSED, STEP_MARQUEE } from "./actionTypes";
-import Media from "./media";
+import { IMedia } from "./media";
 import Emitter from "./emitter";
 import {
   Extras,
@@ -20,13 +19,12 @@ import {
   Store,
 } from "./types";
 
-// TODO: Move to demo
 const compose = composeWithDevTools({
-  actionsBlacklist: [UPDATE_TIME_ELAPSED, STEP_MARQUEE],
+  actionsDenylist: ["UPDATE_TIME_ELAPSED", "STEP_MARQUEE"],
 });
 
 export default function createWebampStore(
-  media: Media,
+  media: IMedia,
   actionEmitter: Emitter,
   customMiddlewares: Middleware[] = [],
   stateOverrides: PartialState | undefined,

@@ -5,6 +5,7 @@ import {
   LoadStyle,
   TimeMode,
   WindowId,
+  PlayerMediaStatus,
 } from "./types";
 import baseSkin from "./baseSkin.json";
 export const BANDS: Band[] = [
@@ -55,7 +56,7 @@ export const VISUALIZERS = {
 
 export const VISUALIZER_ORDER = [
   VISUALIZERS.BAR,
-  VISUALIZERS.OSCILLOSCOPE, // TODO: Verify the order
+  VISUALIZERS.OSCILLOSCOPE, // Order is correct
   VISUALIZERS.NONE,
 ];
 
@@ -64,9 +65,17 @@ export const TIME_MODE: Record<TimeMode, TimeMode> = {
   REMAINING: "REMAINING",
 };
 
-// TODO: Convert to enum once we are fully Typescript
 export const MEDIA_STATUS: Record<MediaStatus, MediaStatus> = {
   PLAYING: "PLAYING",
   STOPPED: "STOPPED",
   PAUSED: "PAUSED",
 };
+
+export const PLAYER_MEDIA_STATUS: Record<PlayerMediaStatus, PlayerMediaStatus> =
+  {
+    PLAYING: "PLAYING",
+    STOPPED: "STOPPED",
+    PAUSED: "PAUSED",
+    ENDED: "ENDED",
+    CLOSED: "CLOSED",
+  };

@@ -2,6 +2,7 @@
 import { BANDS, MEDIA_STATUS } from "../constants";
 import { Band } from "../types";
 import Emitter from "../emitter";
+import Disposable from "../Disposable";
 import StereoBalanceNode from "./StereoBalanceNode";
 import ElementSource from "./elementSource";
 
@@ -12,10 +13,85 @@ interface StereoBalanceNodeType extends AudioNode {
   };
 }
 
+export interface IMedia {
+  /**
+   * Set the volume from 0 to 100
+   */
+  setVolume(volume: number): void;
+  /**
+   * Set the stereo balance from -100 to 100
+   */
+  setBalance(balance: number): void;
+  /**
+   * Set the preamp value from 0 to 100
+   * The input value represents -12db to 12db, where 50 is 0db (no change)
+   * Equation used is: 10^((dB)/20) = x, where x is the gain value
+   */
+  setPreamp(value: number): void;
+  /**
+   * Register an event listener
+   */
+  on(event: string, callback: (...args: any[]) => void): void;
+  /**
+   * Get the current playback time in seconds
+   */
+  timeElapsed(): number;
+  /**
+   * Get the total duration of the current track in seconds
+   */
+  duration(): number;
+  /**
+   * Start or resume playback
+   */
+  play(): Promise<void>;
+  /**
+   * Pause playback
+   */
+  pause(): void;
+  /**
+   * Stop playback and reset position to beginning
+   */
+  stop(): void;
+  /**
+   * Seek to a specific position as a percentage of the total duration
+   */
+  seekToPercentComplete(percent: number): void;
+  /**
+   * Load a track from a URL and optionally start playing it
+   * Used only for the initial load, since it must have a CORS header
+   */
+  loadFromUrl(url: string, autoPlay: boolean): Promise<void>;
+  /**
+   * Set the gain value for a specific EQ band
+   */
+  setEqBand(band: Band, value: number): void;
+  /**
+   * Disable the equalizer by bypassing all EQ bands
+   */
+  disableEq(): void;
+  /**
+   * Enable the equalizer processing
+   */
+  enableEq(): void;
+  /**
+   * Get the analyser node for visualizer data
+   */
+  getAnalyser(): AnalyserNode;
+  /**
+   * Clean up resources and dispose of the media instance
+   */
+  dispose(): void;
+}
+
+// A constructable class that implements the IMedia interface.
+export interface IMediaClass {
+  new (): IMedia;
+}
+
 // NOTE: While this is not technically a public API, https://winampify.io/ is
 // replacing this class with a custom version. Breaking changes to this API
 // surface should be communicated to Remi.
-export default class Media {
+export default class Media implements IMedia {
   _emitter: Emitter;
   _context: AudioContext;
   _balance: StereoBalanceNodeType;
@@ -25,9 +101,11 @@ export default class Media {
   _gainNode: GainNode;
   _source: ElementSource;
   _bands: { [band: number]: BiquadFilterNode };
+  _disposable: Disposable;
 
   constructor() {
     this._emitter = new Emitter();
+    this._disposable = new Disposable();
     // @ts-ignore Typescript does not know about webkitAudioContext
     this._context = new (window.AudioContext || window.webkitAudioContext)();
     // Fix for iOS and Chrome (Canary) which require that the context be created
@@ -35,22 +113,27 @@ export default class Media {
     // https://developers.google.com/web/updates/2017/09/autoplay-policy-changes
     // https://gist.github.com/laziel/7aefabe99ee57b16081c
     // Via: https://stackoverflow.com/a/43395068/1263117
-    // TODO #leak
     if (this._context.state === "suspended") {
-      const resume = async () => {
+      const resumeHandler = async () => {
         await this._context.resume();
 
         if (this._context.state === "running") {
-          // TODO: Add this to the disposable
-          document.body.removeEventListener("touchend", resume, false);
-          document.body.removeEventListener("click", resume, false);
-          document.body.removeEventListener("keydown", resume, false);
+          document.body.removeEventListener("touchend", resumeHandler, false);
+          document.body.removeEventListener("click", resumeHandler, false);
+          document.body.removeEventListener("keydown", resumeHandler, false);
         }
       };
 
-      document.body.addEventListener("touchend", resume, false);
-      document.body.addEventListener("click", resume, false);
-      document.body.addEventListener("keydown", resume, false);
+      document.body.addEventListener("touchend", resumeHandler, false);
+      document.body.addEventListener("click", resumeHandler, false);
+      document.body.addEventListener("keydown", resumeHandler, false);
+
+      // Add cleanup for resume handlers
+      this._disposable.add(() => {
+        document.body.removeEventListener("touchend", resumeHandler, false);
+        document.body.removeEventListener("click", resumeHandler, false);
+        document.body.removeEventListener("keydown", resumeHandler, false);
+      });
     }
 
     // TODO: Maybe we can get rid of this now that we are using AudioAbstraction?
@@ -243,6 +326,9 @@ export default class Media {
   }
 
   dispose() {
+    // Clean up all event listeners via disposable
+    this._disposable.dispose();
+
     this._source.dispose();
     this._emitter.dispose();
   }

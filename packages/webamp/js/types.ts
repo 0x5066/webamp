@@ -1,3 +1,4 @@
+import type { AnyWebByteStream, IFileInfo } from "strtok3";
 import { PlaylistState } from "./reducers/playlist";
 import { SettingsState } from "./reducers/settings";
 import { UserInputState } from "./reducers/userInput";
@@ -161,13 +162,13 @@ export type SkinData = {
 };
 
 // This is what we actually pass to butterchurn
-type ButterchurnPresetJson = {
+export type ButterchurnPresetJson = {
   name: string;
   butterchurnPresetObject: Object;
 };
 
 // A URL that points to a Butterchurn preset
-interface ButterchurnPresetUrl {
+export interface ButterchurnPresetUrl {
   name: string;
   butterchurnPresetUrl: string;
 }
@@ -564,7 +565,21 @@ export type MediaTagRequestStatus =
   | "COMPLETE"
   | "NOT_REQUESTED";
 
+/** The status of the current media. */
 export type MediaStatus = "PLAYING" | "STOPPED" | "PAUSED";
+
+/**
+ * The media status of the player. Similar to MediaStatus but can discriminate
+ * between different reasons for being stopped.
+ */
+export type PlayerMediaStatus =
+  | "PLAYING"
+  | "STOPPED"
+  | "PAUSED"
+  /** We have reached the end of the playlist. */
+  | "ENDED"
+  /** The player is closed. */
+  | "CLOSED";
 
 export type LoadStyle = "BUFFER" | "PLAY" | "NONE";
 
@@ -716,6 +731,28 @@ export interface Options {
   handleAddUrlEvent?: () => Track[] | null | Promise<Track[] | null>;
   handleLoadListEvent?: () => Track[] | null | Promise<Track[] | null>;
   handleSaveListEvent?: (tracks: Track[]) => null | Promise<null>;
+
+  /**
+   * Have Webamp attempt to connect to the browser's media session API.
+   *
+   * This allows OS/hardware level media controls like play/pause/next/previous
+   * and lock screen "current track" information to work with Webamp.
+   *
+   * https://developer.mozilla.org/en-US/docs/Web/API/Media_Session_API
+   */
+  enableMediaSession?: boolean;
+
+  /**
+   * Milkdrop (Butterchurn) presets to be used. If not specified, the default presets
+   * included in the bundle will be used.
+   *
+   * Presets are expected to be in Butterchurn's JSON format. You can find these
+   * `.json` files in:
+   *
+   * * The [Milkdrop Presets Collection](https://archive.org/details/milkdrops) at the Internet Archive.
+   * * The `butterchurn-presets@3.0.0-beta.4` NPM package
+   */
+  requireButterchurnPresets?: () => Promise<Preset[]>;
 }
 
 /**
@@ -840,24 +877,39 @@ export interface IMusicMetadataBrowserApi {
     audioTrackUrl: string,
     options?: IOptions
   ): Promise<IAudioMetadata>;
+}
+
+/**
+ * Type definition of the portion of the music-metadata module we use in Webamp.
+ */
+export interface IMusicMetadataApi {
+  /**
+   * Parse audio from Node Stream.Readable
+   * @param stream - Stream to read the audio track from
+   * @param fileInfo - File information object or MIME-type, e.g.: 'audio/mpeg'
+   * @param options - Parsing options
+   * @returns Metadata
+   */
+  parseWebStream(
+    webStream: AnyWebByteStream,
+    fileInfo?: IFileInfo | string,
+    options?: IOptions
+  ): Promise<IAudioMetadata>;
 
   /**
-   * Parse audio from Node Buffer
-   * @param {Stream.Readable} stream Audio input stream
-   * @param {string} mimeType <string> Content specification MIME-type, e.g.: 'audio/mpeg'
+   * Parse Web API File
+   * @param {Blob} blob
    * @param {IOptions} options Parsing options
    * @returns {Promise<IAudioMetadata>}
    */
-  parseBuffer(
-    buf: Buffer,
-    mimeType?: string,
-    options?: IOptions
-  ): Promise<IAudioMetadata>;
+  parseBlob(blob: Blob, options?: IOptions): Promise<IAudioMetadata>;
 }
+
+export type IMetadataApi = IMusicMetadataBrowserApi | IMusicMetadataApi;
 
 export interface Extras {
   requireJSZip(): Promise<any>;
-  requireMusicMetadata(): Promise<IMusicMetadataBrowserApi>;
+  requireMusicMetadata(): Promise<IMetadataApi>;
   convertPreset: ((file: File) => Promise<Object>) | null;
   handleTrackDropEvent?: (
     e: React.DragEvent<HTMLDivElement>

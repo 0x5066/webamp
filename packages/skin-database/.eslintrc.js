@@ -14,11 +14,19 @@ module.exports = {
   rules: {
     // "no-console": "warn",
     "@typescript-eslint/no-var-requires": "off",
+    "@typescript-eslint/no-require-imports": "off", // Allow require() in JS files
     "@typescript-eslint/ban-ts-comment": "off",
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/no-namespace": "off",
-    "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+      },
+    ],
   },
   ignorePatterns: ["dist/**"],
 };

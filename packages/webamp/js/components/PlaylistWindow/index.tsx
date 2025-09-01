@@ -7,7 +7,7 @@ import * as Selectors from "../../selectors";
 
 import { clamp } from "../../utils";
 import DropTarget from "../DropTarget";
-import Visualizer from "../Visualizer";
+import Vis from "../Vis";
 import PlaylistShade from "./PlaylistShade";
 import AddMenu from "./AddMenu";
 import RemoveMenu from "./RemoveMenu";
@@ -51,7 +51,7 @@ function PlaylistWindow({ analyser }: Props) {
   const toggleShade = useActionCreator(Actions.togglePlaylistShadeMode);
   const scrollUpFourTracks = useActionCreator(Actions.scrollUpFourTracks);
   const scrollDownFourTracks = useActionCreator(Actions.scrollDownFourTracks);
-  const scrollVolume = useActionCreator(Actions.scrollVolume);
+  const scrollPlaylistByDelta = useActionCreator(Actions.scrollPlaylistByDelta);
   const loadMedia = useActionCreator(Actions.loadMedia);
 
   const showVisualizer = playlistSize[0] > 2;
@@ -97,7 +97,7 @@ function PlaylistWindow({ analyser }: Props) {
         className={classes}
         style={style}
         handleDrop={handleDrop}
-        onWheel={scrollVolume}
+        onWheelActive={scrollPlaylistByDelta}
       >
         <div className="playlist-top draggable" onDoubleClick={toggleShade}>
           <div className="playlist-top-left draggable" />
@@ -140,10 +140,7 @@ function PlaylistWindow({ analyser }: Props) {
               <div className="playlist-visualizer">
                 {activateVisualizer && (
                   <div className="visualizer-wrapper">
-                    <Visualizer
-                      // @ts-ignore Visualizer is not yet typed
-                      analyser={analyser}
-                    />
+                    <Vis analyser={analyser} />
                   </div>
                 )}
               </div>

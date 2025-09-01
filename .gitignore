@@ -1,5 +1,6 @@
 node_modules
 .vscode
-.parcel-cache
 dist
-parcel-bundle-reports
+
+# Turborepo cache
+.turbo

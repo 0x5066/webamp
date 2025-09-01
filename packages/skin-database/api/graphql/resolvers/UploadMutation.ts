@@ -4,7 +4,7 @@ import * as S3 from "../../../s3";
 import * as Skins from "../../../data/skins";
 import { processUserUploads } from "../../processUserUploads";
 import { Ctx } from "..";
-import { Mutation } from "./MutationResolver";
+import UserContext from "../../../data/UserContext.js";
 
 // We don't use a resolver here, just return the value directly.
 /**
@@ -46,8 +46,8 @@ class UploadMutationResolver {
    * @gqlField
    */
   async get_upload_urls(
-    { files }: { files: UploadUrlRequest[] },
-    { ctx }: Ctx
+    files: UploadUrlRequest[],
+    ctx: UserContext
   ): Promise<Array<UploadUrl | null>> {
     const missing: UploadUrl[] = [];
     await Parallel.each(
@@ -70,7 +70,8 @@ class UploadMutationResolver {
    * @gqlField
    */
   async report_skin_uploaded(
-    { id, md5 }: { id: string; md5: string },
+    id: string,
+    md5: string,
     req: Ctx
   ): Promise<boolean> {
     // TODO: Validate md5 and id;
@@ -83,7 +84,7 @@ class UploadMutationResolver {
 
 /**
  * Mutations for the upload flow
- * @gqlField */
-export async function upload(_: Mutation): Promise<UploadMutationResolver> {
+ * @gqlMutationField */
+export async function upload(): Promise<UploadMutationResolver> {
   return new UploadMutationResolver();
 }

@@ -7,8 +7,6 @@ import FileInfoModel from "./FileInfoModel";
 import { ISkin } from "../api/graphql/resolvers/CommonSkinResolver";
 import SkinResolver from "../api/graphql/resolvers/SkinResolver";
 import { Int } from "grats";
-import { Ctx } from "../api/graphql";
-import { Query } from "../api/graphql/resolvers/QueryResolver";
 
 export type ArchiveFileDebugData = {
   row: ArchiveFileRow;
@@ -116,9 +114,26 @@ export default class ArchiveFileModel {
    * It may not work for all files.
    * @gqlField url
    */
-  getUrl(): string {
+  async getUrl(): Promise<string | null> {
+    if (this.getIsDirectory()) {
+      return null;
+    }
+    const ext = await this.skinExt();
     const filename = encodeURIComponent(this.getFileName());
-    return `https://zip-worker.jordan1320.workers.dev/zip/${this.getMd5()}/${filename}`;
+    return `https://zip-worker.jordan1320.workers.dev/zip/${this.getMd5()}.${ext}/${filename}`;
+  }
+
+  async skinExt(): Promise<string> {
+    const skin = await this.getSkin();
+    const type = skin.getSkinType();
+    switch (type) {
+      case "CLASSIC":
+        return "wsz";
+      case "MODERN":
+        return "wal";
+      default:
+        throw new Error(`Unexpected skin type: "${type}".`);
+    }
   }
 
   async getSkin(): Promise<SkinModel> {
@@ -150,12 +165,11 @@ export default class ArchiveFileModel {
  * Fetch archive file by it's MD5 hash
  *
  * Get information about a file found within a skin's wsz/wal/zip archive.
- * @gqlField
+ * @gqlQueryField
  */
 export async function fetch_archive_file_by_md5(
-  _: Query,
-  { md5 }: { md5: string },
-  { ctx }: Ctx
+  md5: string,
+  ctx: UserContext
 ): Promise<ArchiveFileModel | null> {
   return ArchiveFileModel.fromFileMd5(ctx, md5);
 }

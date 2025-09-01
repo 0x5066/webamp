@@ -2,15 +2,15 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
 
   <body>
     <div id="app" style="height: 100vh">
       <!-- Webamp will attempt to center itself within this div -->
     </div>
-    <script src="https://unpkg.com/webamp@1.4.2/built/webamp.bundle.min.js"></script>
-    <script>
-      const Webamp = window.Webamp;
+    <script type="module">
+      import Webamp from "https://unpkg.com/webamp@^2/butterchurn";
       const webamp = new Webamp({
         initialTracks: [
           {
@@ -20,7 +20,7 @@
             },
             // NOTE: Your audio file must be served from the same domain as your HTML
             // file, or served with permissive CORS HTTP headers:
-            // https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+            // https://docs.webamp.org/docs/guides/cors
             url: "https://cdn.jsdelivr.net/gh/captbaritone/webamp@43434d82cfe0e37286dbbe0666072dc3190a83bc/mp3/llama-2.91.mp3",
             duration: 5.322286,
           },
@@ -35,7 +35,6 @@
         ],
       });
 
-      // Returns a promise indicating when it's done loading.
       webamp.renderWhenReady(document.getElementById("app"));
     </script>
   </body>

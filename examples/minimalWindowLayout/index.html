@@ -2,15 +2,15 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
 
   <body>
     <div id="app" style="height: 100vh">
       <!-- Webamp will attempt to center itself within this div -->
     </div>
-    <script src="https://unpkg.com/webamp@0.0.0-next-6d0ec37b/built/webamp.bundle.min.js"></script>
-    <script>
-      const Webamp = window.Webamp;
+    <script type="module">
+      import Webamp from "https://unpkg.com/webamp@^2";
       const webamp = new Webamp({
         windowLayout: {
           main: {
